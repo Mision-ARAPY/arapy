@@ -49,7 +49,7 @@ fun main(args: Array<String>): Unit = runBlocking {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val rotator = Rotator(
-        azMotor = StepperMotor(cdP
+        azMotor = StepperMotor(
             pulPin = pi.hardwarePwm(AZ_PUL_PIN),
             dirPin = pi.directionPin(AZ_DIR_PIN, "azimuth_dir"),
         ),
