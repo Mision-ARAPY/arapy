@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.kotlinPluginSerialization)
@@ -63,6 +65,77 @@ tasks.register<Exec>("deployToPi") {
             """.trimIndent()
         )
     }
+}
+
+tasks.register<ShadowJar>("shadowJarListenTool") {
+    // Jar ejecutable separado para com.github.arapy.groundstation.tools.ListenFrequencyToolKt -
+    // sirve para correr en la Pi lo mismo que un test de RadioController prueba localmente,
+    // ya que los tests de JUnit no viajan en el shadowJar de deployToPi/runOnPi (solo src/main).
+    group = "shadow"
+    description = "Arma un jar ejecutable con ListenFrequencyTool como entry point"
+    archiveClassifier.set("listen-tool")
+    from(sourceSets.main.get().output)
+    configurations = listOf(project.configurations.getByName("runtimeClasspath"))
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    mergeServiceFiles()
+    manifest {
+        attributes["Main-Class"] = "com.github.arapy.groundstation.tools.ListenFrequencyToolKt"
+    }
+}
+
+tasks.register<Exec>("deployListenToolToPi") {
+    val piHost = "10.154.42.81"
+    val piUser = "arapy"
+    val piPassword = "2306"
+    val jarName = "listen-tool.jar"
+    val jarFileProvider = tasks.named<ShadowJar>("shadowJarListenTool").flatMap { it.archiveFile }
+
+    group = "deployment"
+    description = "Compila y copia el jar de ListenFrequencyTool a la Raspberry Pi"
+    dependsOn("shadowJarListenTool")
+
+    doFirst {
+        val jarFile = jarFileProvider.get().asFile
+        commandLine(
+            "bash", "-c",
+            """
+            sshpass -p '$piPassword' scp -o StrictHostKeyChecking=no "${jarFile.absolutePath}" $piUser@$piHost:~/$jarName
+            """.trimIndent()
+        )
+    }
+}
+
+tasks.register<Exec>("runListenToolOnPi") {
+    val piHost = "10.154.42.81"
+    val piUser = "arapy"
+    val piPassword = "2306"
+    val jarName = "listen-tool.jar"
+
+    group = "deployment"
+    description = "Compila, copia y corre ListenFrequencyTool en la Raspberry Pi"
+    dependsOn("deployListenToolToPi")
+
+    standardInput = System.`in`
+
+    doFirst {
+        // Igual que en runOnPi: limpia cualquier corrida anterior que haya quedado colgada.
+        ProcessBuilder(
+            "sshpass", "-p", piPassword,
+            "ssh", "-o", "StrictHostKeyChecking=no",
+            "$piUser@$piHost",
+            "pkill -f '$jarName' || true"
+        ).inheritIO().start().waitFor()
+    }
+
+    commandLine(
+        "sshpass", "-p", piPassword,
+        "ssh", "-tt",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "ServerAliveInterval=5",
+        "-o", "ServerAliveCountMax=2",
+        "$piUser@$piHost",
+        "exec java -jar ~/$jarName"
+    )
 }
 
 tasks.register<Exec>("runOnPi") {

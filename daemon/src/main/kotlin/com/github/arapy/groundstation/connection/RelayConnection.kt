@@ -119,7 +119,7 @@ class RelayConnection(
 }
 
 @OptIn(ExperimentalSerializationApi::class)
-private suspend fun DefaultClientWebSocketSession.sendPayload(payload: WebsocketPayload) {
+suspend fun DefaultClientWebSocketSession.sendPayload(payload: WebsocketPayload) {
     val bytes = Cbor.encodeToByteArray(WebsocketPayload.serializer(), payload)
     send(Frame.Binary(true, bytes))
 }

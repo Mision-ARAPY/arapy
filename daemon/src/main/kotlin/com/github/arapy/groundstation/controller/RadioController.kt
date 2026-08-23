@@ -15,6 +15,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/** Esquema de demodulación de rtl_fm y el sample rate que necesita para no aliasear. */
+enum class TunerMode(val rtlFmMode: String, val sampleRate: Int) {
+    /** FM angosta: repetidores de voz/paquetes de radioaficionado (lo que usan los modos "FM"/"AFSK" de SatNOGS). */
+    FM("fm", 48000),
+    /** FM ancha: radio comercial (88-108MHz, ~200kHz de desviación). */
+    WBFM("wbfm", 200000),
+}
+
 class RadioController(
     private val scope: CoroutineScope,
 ) {
@@ -34,7 +42,8 @@ class RadioController(
 
     fun listen(
         frequency: Long,
-        demodulator: RadioDemodulator
+        demodulator: RadioDemodulator,
+        tunerMode: TunerMode = TunerMode.FM,
     ) {
         scope.launch {
             mutex.withLock {
@@ -43,8 +52,8 @@ class RadioController(
                 val rtlFm = ProcessBuilder(
                     "rtl_fm",
                     "-f", frequency.toString(),
-                    "-M", "fm",
-                    "-s", "48000",
+                    "-M", tunerMode.rtlFmMode,
+                    "-s", tunerMode.sampleRate.toString(),
                     "-r", "48000",
                 )
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
